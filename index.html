@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rubrica UCI - Evaluacion de Residentes</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --ink: #10233a;
+      --muted: #5a6a7f;
+      --accent: #0f766e;
+      --accent-2: #f59e0b;
+      --line: #d7e0ea;
+      --ok: #15803d;
+      --warn: #b45309;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #d9f3f0 0%, transparent 30%),
+        radial-gradient(circle at 85% 15%, #ffe8c5 0%, transparent 28%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 24px auto;
+      padding: 0 16px 32px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f766e, #115e59 55%, #0b3b64);
+      color: #fff;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 14px 30px rgba(16, 35, 58, 0.18);
+    }
+
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.25rem, 2.8vw, 1.9rem);
+    }
+
+    .hero p {
+      margin: 0;
+      opacity: 0.92;
+    }
+
+    .card {
+      margin-top: 16px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 20px rgba(16, 35, 58, 0.08);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    label { font-size: 0.92rem; color: var(--muted); }
+
+    input, select, textarea {
+      width: 100%;
+      margin-top: 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+      background: #fcfeff;
+    }
+
+    .section h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      color: #0b3b64;
+    }
+
+    .section p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .score-line {
+      display: grid;
+      grid-template-columns: 1fr 190px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .hint {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .result {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .meter {
+      height: 14px;
+      border-radius: 999px;
+      background: #e5edf6;
+      overflow: hidden;
+      border: 1px solid #d3deea;
+    }
+
+    .meter > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #0f766e, #22c55e);
+      transition: width 260ms ease;
+    }
+
+    .score-box {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--ok);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: #e8eef7; color: var(--ink); }
+
+    .status {
+      margin-top: 8px;
+      font-size: 0.9rem;
+      color: var(--warn);
+    }
+
+    .mini-status {
+      margin-top: 8px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .dashboard-title {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: #0b3b64;
+    }
+
+    .subsection-title {
+      margin: 14px 0 8px;
+      font-size: 0.98rem;
+      color: #0b3b64;
+    }
+
+    .table-select {
+      min-width: 130px;
+      margin-top: 0;
+      padding: 6px 8px;
+      font-size: 0.88rem;
+    }
+
+    .tiny {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 8px;
+      text-align: center;
+    }
+
+    th {
+      background: #eef4fb;
+      color: #0b3b64;
+      font-weight: 600;
+    }
+
+    .cell-ok {
+      color: #166534;
+      font-weight: 600;
+    }
+
+    .cell-pending {
+      color: #9a3412;
+      font-weight: 600;
+    }
+
+    textarea { min-height: 84px; }
+
+    @media (max-width: 780px) {
+      .grid { grid-template-columns: 1fr; }
+      .score-line { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .hero {
+        box-shadow: none;
+      }
+
+      .card {
+        box-shadow: none;
+        border: 1px solid #c9d4df;
+      }
+
+      .actions,
+      #btn-save,
+      #btn-load,
+      #btn-summary,
+      #btn-reset {
+        display: none !important;
+      }
+
+      select,
+      input,
+      textarea {
+        border: 1px solid #c9d4df;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section class="hero">
+      <h1>Rubrica Practica UCI - Evaluacion de Residentes</h1>
+      <p>Escala por acapite: 1 a 5. El puntaje total se convierte automaticamente a porcentaje sobre 100%.</p>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <label>Medico de base
+          <select id="evaluator">
+            <option value="">Seleccione medico...</option>
+          </select>
+        </label>
+        <label>Fecha
+          <input id="date" type="date" />
+        </label>
+        <label>Turno
+          <input id="shift" type="text" placeholder="Ej: Matutino / Nocturno" />
+        </label>
+      </div>
+      <div class="mini-status" id="global-status">Selecciona un medico para cargar o crear su rubrica unica con los 4 residentes.</div>
+    </section>
+
+    <section class="card" id="rubric-form">
+      <h3 class="dashboard-title">Rúbrica Unica (4 residentes en un solo formato)</h3>
+      <p class="tiny">Cada medico llena esta unica tabla para los 4 residentes. Luego imprime un solo PDF por medico.</p>
+      <div id="rubric-table-wrap"></div>
+
+      <h4 class="subsection-title">Puntaje actual por residente (este medico)</h4>
+      <div id="current-avg-wrap" style="margin-top:8px;"></div>
+
+      <h4 class="subsection-title">Promedio final por residente (entre los 3 medicos)</h4>
+      <div id="resident-avg-wrap" style="margin-top:8px;"></div>
+
+      <h4 class="subsection-title">Observaciones por residente</h4>
+      <div id="notes-wrap"></div>
+
+      <div class="actions">
+        <button class="btn-primary" id="btn-save" type="button">Guardar rubrica del medico</button>
+        <button class="btn-secondary" id="btn-load" type="button">Cargar rubrica del medico</button>
+        <button class="btn-secondary" id="btn-summary" type="button">Generar resumen</button>
+        <button class="btn-secondary" id="btn-print" type="button">Exportar a PDF / Imprimir</button>
+        <button class="btn-secondary" id="btn-reset" type="button">Limpiar formulario</button>
+      </div>
+
+      <label style="display:block; margin-top:12px;">Resumen de evaluacion (unico por medico)
+        <textarea id="summary" readonly></textarea>
+      </label>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const EVALUATORS = ['Denis Vanegas', 'Mauricio Manzanarez', 'Dora Cerrato'];
+      const RESIDENTS = ['Alfredo Flores', 'Jorge Soza', 'Yordan Arauz', 'Helen Suazo'];
+      const ITEMS = [
+        { key: 'asistencia', label: '1. Asistencia' },
+        { key: 'dominio', label: '2. Dominio de los casos' },
+        { key: 'procedimientos', label: '3. Procedimientos' },
+        { key: 'respeto', label: '4. Respeto' },
+        { key: 'turnos', label: '5. Desempeno en los turnos' }
+      ];
+      const STORAGE_KEY = 'uci_rubrica_por_medico_v2';
+
+      const summary = document.getElementById('summary');
+      const evaluator = document.getElementById('evaluator');
+      const dateInput = document.getElementById('date');
+      const shiftInput = document.getElementById('shift');
+      const rubricTableWrap = document.getElementById('rubric-table-wrap');
+      const notesWrap = document.getElementById('notes-wrap');
+      const currentAvgWrap = document.getElementById('current-avg-wrap');
+      const residentAvgWrap = document.getElementById('resident-avg-wrap');
+      const globalStatus = document.getElementById('global-status');
+
+      const today = new Date().toISOString().slice(0, 10);
+      dateInput.value = today;
+
+      function fillStaticOptions(selectEl, values) {
+        values.forEach((name) => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      fillStaticOptions(evaluator, EVALUATORS);
+
+      function slug(name) {
+        return name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      }
+
+      function selectMarkup(residentName, itemKey) {
+        return [
+          '<select class="table-select score-input" data-resident="' + residentName + '" data-item="' + itemKey + '">',
+          '<option value="">--</option>',
+          '<option value="1">1</option>',
+          '<option value="2">2</option>',
+          '<option value="3">3</option>',
+          '<option value="4">4</option>',
+          '<option value="5">5</option>',
+          '</select>'
+        ].join('');
+      }
+
+      function renderRubric() {
+        let table = '<table><thead><tr><th>Acapite</th>';
+        RESIDENTS.forEach((name) => {
+          table += '<th>' + name + '</th>';
+        });
+        table += '</tr></thead><tbody>';
+
+        ITEMS.forEach((item) => {
+          table += '<tr><th>' + item.label + '</th>';
+          RESIDENTS.forEach((name) => {
+            table += '<td>' + selectMarkup(name, item.key) + '</td>';
+          });
+          table += '</tr>';
+        });
+
+        table += '<tr><th>Puntaje %</th>';
+        RESIDENTS.forEach((name) => {
+          table += '<td id="pct_' + slug(name) + '">0.00%</td>';
+        });
+        table += '</tr>';
+
+        table += '<tr><th>Estado</th>';
+        RESIDENTS.forEach((name) => {
+          table += '<td id="st_' + slug(name) + '" class="cell-pending">Incompleto</td>';
+        });
+        table += '</tr>';
+
+        table += '</tbody></table>';
+        rubricTableWrap.innerHTML = table;
+
+        let notesHtml = '<div class="grid">';
+        RESIDENTS.forEach((name) => {
+          notesHtml +=
+            '<label>' + name +
+            '<textarea data-note-resident="' + name + '" placeholder="Observaciones para ' + name + '"></textarea></label>';
+        });
+        notesHtml += '</div>';
+        notesWrap.innerHTML = notesHtml;
+      }
+
+      renderRubric();
+
+      function allScoreSelects() {
+        return Array.from(document.querySelectorAll('.score-input'));
+      }
+
+      function allNoteAreas() {
+        return Array.from(document.querySelectorAll('textarea[data-note-resident]'));
+      }
+
+      function readStore() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return {};
+          }
+          const parsed = JSON.parse(raw);
+          return typeof parsed === 'object' && parsed ? parsed : {};
+        } catch (err) {
+          return {};
+        }
+      }
+
+      function saveStore(data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+
+      function getEvaluatorKey() {
+        return evaluator.value || '';
+      }
+
+      function residentScores(residentName) {
+        return allScoreSelects()
+          .filter((sel) => sel.dataset.resident === residentName)
+          .map((sel) => Number(sel.value) || 0);
+      }
+
+      function residentCompleted(residentName) {
+        return allScoreSelects()
+          .filter((sel) => sel.dataset.resident === residentName)
+          .every((sel) => sel.value !== '');
+      }
+
+      function residentPercent(residentName) {
+        const scores = residentScores(residentName);
+        const sum = scores.reduce((acc, n) => acc + n, 0);
+        return (sum / 25) * 100;
+      }
+
+      function updateResidentViews() {
+        let completeResidents = 0;
+
+        RESIDENTS.forEach((residentName) => {
+          const pct = residentPercent(residentName);
+          const done = residentCompleted(residentName);
+
+          const pctCell = document.getElementById('pct_' + slug(residentName));
+          const stCell = document.getElementById('st_' + slug(residentName));
+          pctCell.textContent = pct.toFixed(2) + '%';
+
+          if (done) {
+            completeResidents += 1;
+            stCell.textContent = 'Completo';
+            stCell.className = 'cell-ok';
+          } else {
+            stCell.textContent = 'Incompleto';
+            stCell.className = 'cell-pending';
+          }
+        });
+
+        renderResidentAverageTable();
+        globalStatus.textContent =
+          'Residentes completos en esta rubrica: ' + completeResidents + '/4. Cada medico imprime 1 solo PDF con los 4 residentes.';
+      }
+
+      function setFormFromRecord(record) {
+        if (!record) {
+          return;
+        }
+
+        allScoreSelects().forEach((sel) => {
+          const residentName = sel.dataset.resident;
+          const itemKey = sel.dataset.item;
+          const value =
+            record.scores && record.scores[residentName] && record.scores[residentName][itemKey]
+              ? record.scores[residentName][itemKey]
+              : '';
+          sel.value = value;
+        });
+
+        allNoteAreas().forEach((area) => {
+          const residentName = area.dataset.noteResident;
+          area.value = record.notes && record.notes[residentName] ? record.notes[residentName] : '';
+        });
+
+        dateInput.value = record.date || today;
+        shiftInput.value = record.shift || '';
+        updateResidentViews();
+      }
+
+      function getFormRecord() {
+        const scores = {};
+        RESIDENTS.forEach((name) => {
+          scores[name] = {};
+        });
+
+        allScoreSelects().forEach((sel) => {
+          const residentName = sel.dataset.resident;
+          const itemKey = sel.dataset.item;
+          scores[residentName][itemKey] = sel.value;
+        });
+
+        const notes = {};
+        allNoteAreas().forEach((area) => {
+          notes[area.dataset.noteResident] = area.value.trim();
+        });
+
+        return {
+          evaluator: evaluator.value,
+          date: dateInput.value || today,
+          shift: shiftInput.value.trim(),
+          scores,
+          notes,
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      function renderResidentAverageTable() {
+        const row = [];
+        RESIDENTS.forEach((name) => {
+          row.push({
+            resident: name,
+            percent: residentPercent(name).toFixed(2),
+            completed: residentCompleted(name)
+          });
+        });
+
+        let avgHtml = '<table><thead><tr><th>Residente</th><th>Puntaje (%)</th><th>Estado</th></tr></thead><tbody>';
+        row.forEach((r) => {
+          avgHtml += '<tr><th>' + r.resident + '</th><td>' + r.percent + '%</td><td>' + (r.completed ? 'Completo' : 'Incompleto') + '</td></tr>';
+        });
+        avgHtml += '</tbody></table>';
+        currentAvgWrap.innerHTML = avgHtml;
+      }
+
+      function renderCrossEvaluatorAverage() {
+        const store = readStore();
+        let avgHtml = '<table><thead><tr><th>Residente</th><th>Evaluaciones completas</th><th>Promedio (%)</th></tr></thead><tbody>';
+        RESIDENTS.forEach((residentName) => {
+          let sum = 0;
+          let count = 0;
+
+          EVALUATORS.forEach((doc) => {
+            const record = store[doc];
+            if (record && record.scores && record.scores[residentName]) {
+              const items = record.scores[residentName];
+              const values = ITEMS.map((it) => Number(items[it.key]) || 0);
+              const allSet = ITEMS.every((it) => (items[it.key] || '') !== '');
+              if (allSet) {
+                sum += (values.reduce((a, b) => a + b, 0) / 25) * 100;
+                count += 1;
+              }
+            }
+          });
+
+          const avgText = count > 0 ? (sum / count).toFixed(2) + '%' : 'Sin datos';
+          avgHtml +=
+            '<tr><th>' + residentName + '</th><td>' + count + '/3</td><td>' + avgText + '</td></tr>';
+        });
+        avgHtml += '</tbody></table>';
+        residentAvgWrap.innerHTML = avgHtml;
+      }
+
+      function categoryLabel(id) {
+        const found = ITEMS.find((it) => it.key === id);
+        return found ? found.label : id;
+      }
+
+      function buildSummary() {
+        const evalName = evaluator.value || 'No especificado';
+        const date = dateInput.value || 'No especificada';
+        const shift = shiftInput.value.trim() || 'No especificado';
+
+        const lines = [
+          'RUBRICA UCI - RESUMEN',
+          'Medico evaluador: ' + evalName,
+          'Fecha: ' + date,
+          'Turno: ' + shift,
+          ''
+        ];
+
+        RESIDENTS.forEach((residentName) => {
+          lines.push('Residente: ' + residentName);
+          ITEMS.forEach((item) => {
+            const select = document.querySelector(
+              '.score-input[data-resident="' + residentName + '"][data-item="' + item.key + '"]'
+            );
+            const value = select && select.value !== '' ? select.value : 'Sin calificar';
+            lines.push('- ' + categoryLabel(item.key) + ': ' + value + '/5');
+          });
+          lines.push('Puntaje del residente: ' + residentPercent(residentName).toFixed(2) + '%');
+
+          const noteArea = document.querySelector('textarea[data-note-resident="' + residentName + '"]');
+          lines.push('Observaciones: ' + (noteArea && noteArea.value.trim() ? noteArea.value.trim() : 'Sin observaciones'));
+          lines.push('');
+        });
+
+        lines.push('Promedio general por residente (entre medicos) se visualiza en la tabla inferior.');
+
+        summary.value = lines.join('\n');
+      }
+
+      allScoreSelects().forEach((sel) => sel.addEventListener('change', updateResidentViews));
+
+      document.getElementById('btn-summary').addEventListener('click', function () {
+        updateResidentViews();
+        buildSummary();
+      });
+
+      document.getElementById('btn-save').addEventListener('click', function () {
+        const key = getEvaluatorKey();
+        if (!key) {
+          alert('Debes seleccionar el medico de base antes de guardar.');
+          return;
+        }
+        const store = readStore();
+        store[key] = getFormRecord();
+        saveStore(store);
+        updateResidentViews();
+        renderCrossEvaluatorAverage();
+        alert('Rúbrica guardada para ' + key + '.');
+      });
+
+      document.getElementById('btn-load').addEventListener('click', function () {
+        const key = getEvaluatorKey();
+        if (!key) {
+          alert('Debes seleccionar el medico de base para cargar su rubrica.');
+          return;
+        }
+        const store = readStore();
+        if (!store[key]) {
+          alert('No existe una rubrica guardada para este medico.');
+          return;
+        }
+        setFormFromRecord(store[key]);
+        renderCrossEvaluatorAverage();
+        buildSummary();
+      });
+
+      document.getElementById('btn-print').addEventListener('click', function () {
+        window.print();
+      });
+
+      document.getElementById('btn-reset').addEventListener('click', function () {
+        allScoreSelects().forEach((sel) => {
+          sel.value = '';
+        });
+        allNoteAreas().forEach((area) => {
+          area.value = '';
+        });
+        summary.value = '';
+        dateInput.value = today;
+        shiftInput.value = '';
+        updateResidentViews();
+      });
+
+      evaluator.addEventListener('change', function () {
+        const key = getEvaluatorKey();
+        if (!key) {
+          globalStatus.textContent = 'Selecciona un medico para cargar o crear su rubrica unica con los 4 residentes.';
+          return;
+        }
+        globalStatus.textContent =
+          'Medico seleccionado: ' + key + '. Puedes cargar su rubrica, editarla y luego imprimir un solo PDF.';
+      });
+
+      updateResidentViews();
+      renderCrossEvaluatorAverage();
+    })();
+  </script>
+</body>
+</html>
