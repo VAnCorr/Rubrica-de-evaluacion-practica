@@ -140,7 +140,8 @@ function uploadPdf(payload) {
 
   return {
     fileId: file.getId(),
-    fileUrl: file.getUrl()
+    fileUrl: file.getUrl(),
+    byteLength: bytes.length
   };
 }
 

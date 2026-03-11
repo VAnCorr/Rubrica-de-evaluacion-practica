@@ -697,44 +697,66 @@
           throw new Error('Falta la URL de Web App de Apps Script.');
         }
 
-        const formBody = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+        const rawBody = JSON.stringify(payload);
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: formBody
-        });
-
-        const text = await response.text();
-        let parsed;
         try {
-          parsed = JSON.parse(text);
-        } catch (err) {
-          throw new Error('Respuesta no JSON: ' + text.slice(0, 220));
-        }
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: rawBody
+          });
 
-        if (!response.ok || !parsed.ok) {
-          throw new Error(parsed.message || ('Error HTTP ' + response.status));
-        }
+          const text = await response.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(text);
+          } catch (err) {
+            throw new Error('Respuesta no JSON: ' + text.slice(0, 220));
+          }
 
-        return parsed;
+          if (!response.ok || !parsed.ok) {
+            throw new Error(parsed.message || ('Error HTTP ' + response.status));
+          }
+
+          return parsed;
+        } catch (primaryError) {
+          const formBody = new URLSearchParams({ payload: rawBody }).toString();
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: formBody
+          });
+
+          const text = await response.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(text);
+          } catch (err) {
+            throw new Error('Respuesta no JSON: ' + text.slice(0, 220));
+          }
+
+          if (!response.ok || !parsed.ok) {
+            throw new Error(parsed.message || ('Error HTTP ' + response.status));
+          }
+
+          return parsed;
+        }
       }
 
-      function toBase64FromBlob(blob) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const result = String(reader.result || '');
-            const base64 = result.includes(',') ? result.split(',')[1] : result;
-            resolve(base64);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+      function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          const chunk = bytes.subarray(i, i + chunkSize);
+          binary += String.fromCharCode.apply(null, chunk);
+        }
+        return btoa(binary);
       }
 
-      async function generatePdfBlob() {
+      function generatePdfBase64() {
         const jspdfNs = window.jspdf;
         if (!jspdfNs || !jspdfNs.jsPDF) {
           throw new Error('No se pudo cargar jsPDF.');
@@ -777,7 +799,11 @@
           y += 2;
         });
 
-        return doc.output('blob');
+        const buffer = doc.output('arraybuffer');
+        return {
+          base64: arrayBufferToBase64(buffer),
+          byteLength: buffer.byteLength
+        };
       }
 
       allScoreSelects().forEach((sel) => sel.addEventListener('change', updateResidentViews));
@@ -851,8 +877,7 @@
           }
 
           cloudStatus.textContent = 'Generando PDF...';
-          const blob = await generatePdfBlob();
-          const pdfBase64 = await toBase64FromBlob(blob);
+          const pdf = generatePdfBase64();
           const fileName =
             'Rubrica_UCI_' + key.replace(/\s+/g, '_') + '_' + (dateInput.value || today).replace(/-/g, '') + '.pdf';
 
@@ -861,7 +886,7 @@
             folderId: DRIVE_FOLDER_ID,
             fileName: fileName,
             mimeType: 'application/pdf',
-            fileBase64: pdfBase64,
+            fileBase64: pdf.base64,
             evaluator: key,
             date: dateInput.value || today,
             shift: shiftInput.value.trim()
@@ -869,7 +894,8 @@
 
           cloudStatus.textContent = 'Subiendo PDF a Google Drive...';
           const result = await postToAppsScript(payload);
-          cloudStatus.textContent = 'PDF subido a Drive: ' + (result.fileUrl || result.message || 'OK');
+          const bytesInfo = result.byteLength ? (' (' + result.byteLength + ' bytes)') : '';
+          cloudStatus.textContent = 'PDF subido a Drive: ' + (result.fileUrl || result.message || 'OK') + bytesInfo;
           alert('PDF enviado a Drive correctamente.');
         } catch (err) {
           cloudStatus.textContent = 'Error al subir PDF: ' + err.message;
