@@ -121,7 +121,19 @@ function uploadPdf(payload) {
     throw new Error('Falta fileBase64.');
   }
 
+  // Soporta payload en formato data URL: data:application/pdf;base64,xxxx
+  if (fileBase64.indexOf(',') !== -1) {
+    fileBase64 = fileBase64.split(',')[1];
+  }
+
   var bytes = Utilities.base64Decode(fileBase64);
+
+  // Verifica firma PDF (%PDF) para evitar archivos corruptos.
+  var header = Utilities.newBlob(bytes.slice(0, 4)).getDataAsString();
+  if (header !== '%PDF') {
+    throw new Error('El archivo recibido no tiene formato PDF valido.');
+  }
+
   var blob = Utilities.newBlob(bytes, mimeType, fileName);
   var folder = DriveApp.getFolderById(folderId);
   var file = folder.createFile(blob);
