@@ -827,6 +827,12 @@
             return;
           }
 
+          const ok = confirm('Se enviaran las notas del medico ' + key + ' a Google Sheets. ¿Deseas continuar?');
+          if (!ok) {
+            cloudStatus.textContent = 'Envio cancelado por el usuario.';
+            return;
+          }
+
           const payload = {
             action: 'saveScores',
             spreadsheetId: SHEET_ID,
@@ -839,9 +845,10 @@
           cloudStatus.textContent = 'Enviando notas a Google Sheets...';
           const result = await postToAppsScript(payload);
           cloudStatus.textContent = 'Google Sheets actualizado: ' + (result.message || 'OK');
+          alert('Confirmado: datos enviados a Google Sheets.\n\n' + (result.message || 'Operacion completada.'));
         } catch (err) {
           cloudStatus.textContent = 'Error al guardar en Google Sheets: ' + err.message;
-          alert('No se pudo guardar en Google Sheets. Revisa la URL de Web App y permisos.');
+          alert('No se pudo guardar en Google Sheets.\n\nDetalle: ' + err.message + '\n\nRevisa la URL del Web App y permisos del deployment.');
         }
       });
 
@@ -850,6 +857,12 @@
           const key = getEvaluatorKey();
           if (!key) {
             alert('Selecciona el medico evaluador antes de subir PDF.');
+            return;
+          }
+
+          const ok = confirm('Se generara un PDF y se subira a Google Drive para el medico ' + key + '. ¿Deseas continuar?');
+          if (!ok) {
+            cloudStatus.textContent = 'Carga de PDF cancelada por el usuario.';
             return;
           }
 
@@ -873,9 +886,10 @@
           cloudStatus.textContent = 'Subiendo PDF a Google Drive...';
           const result = await postToAppsScript(payload);
           cloudStatus.textContent = 'PDF subido a Drive: ' + (result.fileUrl || result.message || 'OK');
+          alert('Confirmado: PDF enviado a Drive.\n\n' + (result.fileUrl || result.message || 'Operacion completada.'));
         } catch (err) {
           cloudStatus.textContent = 'Error al subir PDF: ' + err.message;
-          alert('No se pudo generar/subir el PDF. Revisa la URL de Web App y permisos.');
+          alert('No se pudo generar/subir el PDF.\n\nDetalle: ' + err.message + '\n\nRevisa la URL del Web App y permisos del deployment.');
         }
       });
 
