@@ -803,6 +803,8 @@
       document.getElementById('btn-summary').addEventListener('click', function () {
         updateResidentViews();
         buildSummary();
+        cloudStatus.textContent = 'Resumen generado correctamente.';
+        alert('Resumen actualizado.');
       });
 
       document.getElementById('btn-save').addEventListener('click', function () {
@@ -907,6 +909,8 @@
         setFormFromRecord(store[key]);
         renderCrossEvaluatorAverage();
         buildSummary();
+        cloudStatus.textContent = 'Rubrica cargada para ' + key + '.';
+        alert('Rubrica cargada para ' + key + '.');
       });
 
       document.getElementById('btn-print').addEventListener('click', function () {
@@ -914,6 +918,12 @@
       });
 
       document.getElementById('btn-reset').addEventListener('click', function () {
+        const ok = confirm('Se limpiaran los campos de la rubrica en pantalla. ¿Deseas continuar?');
+        if (!ok) {
+          cloudStatus.textContent = 'Limpieza cancelada por el usuario.';
+          return;
+        }
+
         allScoreSelects().forEach((sel) => {
           sel.value = '';
         });
@@ -924,6 +934,8 @@
         dateInput.value = today;
         shiftInput.value = '';
         updateResidentViews();
+        cloudStatus.textContent = 'Formulario limpiado correctamente.';
+        alert('Formulario limpiado.');
       });
 
       evaluator.addEventListener('change', function () {
