@@ -699,13 +699,14 @@
         }
 
         const body = JSON.stringify(payload);
+        const formBody = new URLSearchParams({ payload: body }).toString();
 
         try {
           const response = await fetch(endpoint, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: formBody
           });
 
           const text = await response.text();
@@ -726,8 +727,8 @@
           await fetch(endpoint, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: formBody
           });
 
           return {
