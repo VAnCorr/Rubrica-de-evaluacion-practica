@@ -358,6 +358,8 @@
         { key: 'turnos', label: '5. Desempeno en los turnos' }
       ];
       const STORAGE_KEY = 'uci_rubrica_por_medico_v2';
+      const APPS_SCRIPT_URL_KEY = 'uci_apps_script_url_v1';
+      const APPS_SCRIPT_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxTMmFtuPAthxkdwG25IntZa-LekiEpO2sc-FmiTLDJgiw9eaZsY_ThP5Mfm5Q1APWJ/exec';
       const SHEET_ID = '1jdh09b3KiAbWAO5c6KGQf_yQRiqu5K5hHU3ZBHknP48';
       const DRIVE_FOLDER_ID = '12uLk5DzHQc6H3r_J6S3e5OiyGAGcGq0g';
 
@@ -375,6 +377,13 @@
 
       const today = new Date().toISOString().slice(0, 10);
       dateInput.value = today;
+
+      var storedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_KEY);
+      appsScriptUrlInput.value = storedAppsScriptUrl || APPS_SCRIPT_URL_DEFAULT;
+
+      appsScriptUrlInput.addEventListener('change', function () {
+        localStorage.setItem(APPS_SCRIPT_URL_KEY, appsScriptUrlInput.value.trim());
+      });
 
       function fillStaticOptions(selectEl, values) {
         values.forEach((name) => {
