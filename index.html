@@ -198,6 +198,16 @@
       color: var(--muted);
     }
 
+    .cloud-status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #f1f7ff;
+      border: 1px solid #cfe0f6;
+      color: #21476b;
+      font-size: 0.9rem;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -294,6 +304,17 @@
       <div class="mini-status" id="global-status">Selecciona un medico para cargar o crear su rubrica unica con los 4 residentes.</div>
     </section>
 
+    <section class="card">
+      <h3 class="dashboard-title">Integracion Google</h3>
+      <div class="grid">
+        <label>URL Web App de Apps Script (deployment /exec)
+          <input id="apps-script-url" type="url" placeholder="Pega aqui tu URL .../exec" />
+        </label>
+      </div>
+      <p class="tiny">Importante: usa la URL de deployment que termina en /exec, no /dev ni macros/library.</p>
+      <div class="cloud-status" id="cloud-status">Aun no se ha sincronizado con Google Sheets/Drive.</div>
+    </section>
+
     <section class="card" id="rubric-form">
       <h3 class="dashboard-title">Rúbrica Unica (4 residentes en un solo formato)</h3>
       <p class="tiny">Cada medico llena esta unica tabla para los 4 residentes. Luego imprime un solo PDF por medico.</p>
@@ -312,6 +333,8 @@
         <button class="btn-primary" id="btn-save" type="button">Guardar rubrica del medico</button>
         <button class="btn-secondary" id="btn-load" type="button">Cargar rubrica del medico</button>
         <button class="btn-secondary" id="btn-summary" type="button">Generar resumen</button>
+        <button class="btn-secondary" id="btn-sync-sheet" type="button">Guardar notas en Google Sheets</button>
+        <button class="btn-secondary" id="btn-upload-pdf" type="button">Generar PDF y enviar a Drive</button>
         <button class="btn-secondary" id="btn-print" type="button">Exportar a PDF / Imprimir</button>
         <button class="btn-secondary" id="btn-reset" type="button">Limpiar formulario</button>
       </div>
@@ -322,6 +345,7 @@
     </section>
   </main>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     (function () {
       const EVALUATORS = ['Denis Vanegas', 'Mauricio Manzanarez', 'Dora Cerrato'];
@@ -334,11 +358,17 @@
         { key: 'turnos', label: '5. Desempeno en los turnos' }
       ];
       const STORAGE_KEY = 'uci_rubrica_por_medico_v2';
+      const APPS_SCRIPT_URL_KEY = 'uci_apps_script_url_v2';
+      const APPS_SCRIPT_URL_DEFAULT = '';
+      const SHEET_ID = '1PaM-2gpIB-HiA59Uw947bNsEfGjIR-8ZdchMzO6wj8w';
+      const DRIVE_FOLDER_ID = '12uLk5DzHQc6H3r_J6S3e5OiyGAGcGq0g';
 
       const summary = document.getElementById('summary');
       const evaluator = document.getElementById('evaluator');
       const dateInput = document.getElementById('date');
       const shiftInput = document.getElementById('shift');
+      const appsScriptUrlInput = document.getElementById('apps-script-url');
+      const cloudStatus = document.getElementById('cloud-status');
       const rubricTableWrap = document.getElementById('rubric-table-wrap');
       const notesWrap = document.getElementById('notes-wrap');
       const currentAvgWrap = document.getElementById('current-avg-wrap');
@@ -347,6 +377,13 @@
 
       const today = new Date().toISOString().slice(0, 10);
       dateInput.value = today;
+
+      var storedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_KEY);
+      appsScriptUrlInput.value = storedAppsScriptUrl || APPS_SCRIPT_URL_DEFAULT;
+
+      appsScriptUrlInput.addEventListener('change', function () {
+        localStorage.setItem(APPS_SCRIPT_URL_KEY, appsScriptUrlInput.value.trim());
+      });
 
       function fillStaticOptions(selectEl, values) {
         values.forEach((name) => {
@@ -628,6 +665,121 @@
         summary.value = lines.join('\n');
       }
 
+      function getAppsScriptUrl() {
+        return appsScriptUrlInput.value.trim();
+      }
+
+      function getResidentsPayload() {
+        return RESIDENTS.map((residentName) => {
+          const scoreMap = {};
+          ITEMS.forEach((item) => {
+            const select = document.querySelector(
+              '.score-input[data-resident="' + residentName + '"][data-item="' + item.key + '"]'
+            );
+            scoreMap[item.key] = select ? (select.value || '') : '';
+          });
+
+          const noteArea = document.querySelector('textarea[data-note-resident="' + residentName + '"]');
+
+          return {
+            resident: residentName,
+            scores: scoreMap,
+            percent: Number(residentPercent(residentName).toFixed(2)),
+            completed: residentCompleted(residentName),
+            notes: noteArea ? noteArea.value.trim() : ''
+          };
+        });
+      }
+
+      async function postToAppsScript(payload) {
+        const endpoint = getAppsScriptUrl();
+        if (!endpoint) {
+          throw new Error('Falta la URL de Web App de Apps Script.');
+        }
+
+        const formBody = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: formBody
+        });
+
+        const text = await response.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (err) {
+          throw new Error('Respuesta no JSON: ' + text.slice(0, 220));
+        }
+
+        if (!response.ok || !parsed.ok) {
+          throw new Error(parsed.message || ('Error HTTP ' + response.status));
+        }
+
+        return parsed;
+      }
+
+      function toBase64FromBlob(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = String(reader.result || '');
+            const base64 = result.includes(',') ? result.split(',')[1] : result;
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      async function generatePdfBlob() {
+        const jspdfNs = window.jspdf;
+        if (!jspdfNs || !jspdfNs.jsPDF) {
+          throw new Error('No se pudo cargar jsPDF.');
+        }
+        const doc = new jspdfNs.jsPDF('p', 'mm', 'a4');
+        const pageWidth = 190;
+        let y = 12;
+
+        function writeLine(text, size, weight) {
+          doc.setFont('helvetica', weight || 'normal');
+          doc.setFontSize(size || 10);
+          const split = doc.splitTextToSize(text, pageWidth);
+          split.forEach((line) => {
+            if (y > 285) {
+              doc.addPage();
+              y = 12;
+            }
+            doc.text(line, 10, y);
+            y += 5;
+          });
+        }
+
+        writeLine('Rubrica Practica UCI - Evaluacion de Residentes', 13, 'bold');
+        writeLine('Medico evaluador: ' + (evaluator.value || 'No especificado'), 10, 'normal');
+        writeLine('Fecha: ' + (dateInput.value || 'No especificada') + ' | Turno: ' + (shiftInput.value.trim() || 'No especificado'), 10, 'normal');
+        y += 2;
+
+        RESIDENTS.forEach((residentName) => {
+          writeLine('Residente: ' + residentName, 11, 'bold');
+          ITEMS.forEach((item) => {
+            const select = document.querySelector(
+              '.score-input[data-resident="' + residentName + '"][data-item="' + item.key + '"]'
+            );
+            const value = select && select.value ? select.value : 'Sin calificar';
+            writeLine(item.label + ': ' + value + '/5', 10, 'normal');
+          });
+          writeLine('Puntaje %: ' + residentPercent(residentName).toFixed(2) + '%', 10, 'bold');
+          const noteArea = document.querySelector('textarea[data-note-resident="' + residentName + '"]');
+          writeLine('Observaciones: ' + (noteArea && noteArea.value.trim() ? noteArea.value.trim() : 'Sin observaciones'), 10, 'normal');
+          y += 2;
+        });
+
+        return doc.output('blob');
+      }
+
       allScoreSelects().forEach((sel) => sel.addEventListener('change', updateResidentViews));
 
       document.getElementById('btn-summary').addEventListener('click', function () {
@@ -649,6 +801,80 @@
         updateResidentViews();
         renderCrossEvaluatorAverage();
         alert('Rúbrica guardada para ' + key + '.');
+      });
+
+      document.getElementById('btn-sync-sheet').addEventListener('click', async function () {
+        try {
+          const key = getEvaluatorKey();
+          if (!key) {
+            alert('Selecciona el medico evaluador antes de sincronizar.');
+            return;
+          }
+
+          const proceed = confirm('Se enviaran las notas del medico ' + key + ' a Google Sheets. ¿Continuar?');
+          if (!proceed) {
+            cloudStatus.textContent = 'Envio cancelado por el usuario.';
+            return;
+          }
+
+          const payload = {
+            action: 'saveScores',
+            spreadsheetId: SHEET_ID,
+            evaluator: key,
+            date: dateInput.value || today,
+            shift: shiftInput.value.trim(),
+            residents: getResidentsPayload()
+          };
+
+          cloudStatus.textContent = 'Enviando notas a Google Sheets...';
+          const result = await postToAppsScript(payload);
+          cloudStatus.textContent = 'Google Sheets actualizado: ' + (result.message || 'OK');
+          alert('Datos enviados a Google Sheets correctamente.');
+        } catch (err) {
+          cloudStatus.textContent = 'Error al guardar en Google Sheets: ' + err.message;
+          alert('Error al guardar en Google Sheets: ' + err.message);
+        }
+      });
+
+      document.getElementById('btn-upload-pdf').addEventListener('click', async function () {
+        try {
+          const key = getEvaluatorKey();
+          if (!key) {
+            alert('Selecciona el medico evaluador antes de subir PDF.');
+            return;
+          }
+
+          const proceed = confirm('Se generara un PDF y se subira a Google Drive para ' + key + '. ¿Continuar?');
+          if (!proceed) {
+            cloudStatus.textContent = 'Carga de PDF cancelada por el usuario.';
+            return;
+          }
+
+          cloudStatus.textContent = 'Generando PDF...';
+          const blob = await generatePdfBlob();
+          const pdfBase64 = await toBase64FromBlob(blob);
+          const fileName =
+            'Rubrica_UCI_' + key.replace(/\s+/g, '_') + '_' + (dateInput.value || today).replace(/-/g, '') + '.pdf';
+
+          const payload = {
+            action: 'uploadPdf',
+            folderId: DRIVE_FOLDER_ID,
+            fileName: fileName,
+            mimeType: 'application/pdf',
+            fileBase64: pdfBase64,
+            evaluator: key,
+            date: dateInput.value || today,
+            shift: shiftInput.value.trim()
+          };
+
+          cloudStatus.textContent = 'Subiendo PDF a Google Drive...';
+          const result = await postToAppsScript(payload);
+          cloudStatus.textContent = 'PDF subido a Drive: ' + (result.fileUrl || result.message || 'OK');
+          alert('PDF enviado a Drive correctamente.');
+        } catch (err) {
+          cloudStatus.textContent = 'Error al subir PDF: ' + err.message;
+          alert('Error al subir PDF: ' + err.message);
+        }
       });
 
       document.getElementById('btn-load').addEventListener('click', function () {
