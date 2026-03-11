@@ -698,25 +698,43 @@
           throw new Error('Falta la URL del Web App de Apps Script.');
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
-        });
+        const body = JSON.stringify(payload);
 
-        const text = await response.text();
-        let parsed;
         try {
-          parsed = JSON.parse(text);
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body
+          });
+
+          const text = await response.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(text);
+          } catch (err) {
+            parsed = { ok: false, message: 'Respuesta no JSON: ' + text.slice(0, 200) };
+          }
+
+          if (!response.ok || !parsed.ok) {
+            throw new Error(parsed.message || ('Error HTTP ' + response.status));
+          }
+
+          return parsed;
         } catch (err) {
-          parsed = { ok: false, message: 'Respuesta no JSON: ' + text.slice(0, 200) };
-        }
+          // Fallback for browsers that block CORS on Apps Script redirects.
+          await fetch(endpoint, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body
+          });
 
-        if (!response.ok || !parsed.ok) {
-          throw new Error(parsed.message || ('Error HTTP ' + response.status));
+          return {
+            ok: true,
+            message: 'Solicitud enviada en modo compatibilidad (no-cors). Verifica en Google Sheets/Drive.'
+          };
         }
-
-        return parsed;
       }
 
       function toBase64FromBlob(blob) {
