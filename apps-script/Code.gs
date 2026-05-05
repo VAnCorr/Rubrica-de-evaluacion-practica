@@ -61,23 +61,7 @@ function saveScores(payload) {
     sheet = ss.insertSheet('Evaluaciones');
   }
 
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow([
-      'Timestamp',
-      'Fecha',
-      'Turno',
-      'Medico',
-      'Residente',
-      'Asistencia',
-      'Dominio',
-      'Procedimientos',
-      'Respeto',
-      'DesempenoTurnos',
-      'Porcentaje',
-      'Completo',
-      'Observaciones'
-    ]);
-  }
+  ensureEvaluacionesHeader_(sheet);
 
   var rows = [];
   for (var i = 0; i < residents.length; i++) {
@@ -100,12 +84,76 @@ function saveScores(payload) {
     ]);
   }
 
-  if (rows.length > 0) {
-    var startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  var summary = upsertEvaluacionesRows_(sheet, rows);
+
+  return {
+    message: 'Evaluaciones sincronizadas. Nuevas: ' + summary.inserted + ', actualizadas: ' + summary.updated + '.',
+    rows: rows.length,
+    inserted: summary.inserted,
+    updated: summary.updated
+  };
+}
+
+function ensureEvaluacionesHeader_(sheet) {
+  if (sheet.getLastRow() > 0) {
+    return;
   }
 
-  return { message: 'Se registraron ' + rows.length + ' filas en Evaluaciones.', rows: rows.length };
+  sheet.appendRow([
+    'Timestamp',
+    'Fecha',
+    'Turno',
+    'Medico',
+    'Residente',
+    'Asistencia',
+    'Dominio',
+    'Procedimientos',
+    'Respeto',
+    'DesempenoTurnos',
+    'Porcentaje',
+    'Completo',
+    'Observaciones'
+  ]);
+}
+
+function upsertEvaluacionesRows_(sheet, rows) {
+  if (!rows.length) {
+    return { inserted: 0, updated: 0 };
+  }
+
+  var lastRow = sheet.getLastRow();
+  var existingIndex = {};
+  if (lastRow >= 2) {
+    var existingRows = sheet.getRange(2, 1, lastRow - 1, rows[0].length).getValues();
+    for (var i = 0; i < existingRows.length; i++) {
+      existingIndex[evaluacionKey_(existingRows[i])] = i + 2;
+    }
+  }
+
+  var inserted = 0;
+  var updated = 0;
+
+  for (var j = 0; j < rows.length; j++) {
+    var row = rows[j];
+    var key = evaluacionKey_(row);
+    var targetRow = existingIndex[key];
+
+    if (targetRow) {
+      sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+      updated += 1;
+      continue;
+    }
+
+    sheet.appendRow(row);
+    inserted += 1;
+    existingIndex[key] = sheet.getLastRow();
+  }
+
+  return { inserted: inserted, updated: updated };
+}
+
+function evaluacionKey_(row) {
+  return [row[1], row[2], row[3], row[4]].join('||');
 }
 
 function uploadPdf(payload) {

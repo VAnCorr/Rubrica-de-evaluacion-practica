@@ -208,6 +208,30 @@
       font-size: 0.9rem;
     }
 
+    .cloud-status.is-pending {
+      background: #fff7ed;
+      border-color: #fdba74;
+      color: #9a3412;
+    }
+
+    .cloud-status.is-syncing {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+
+    .cloud-status.is-success {
+      background: #ecfdf5;
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .cloud-status.is-error {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -323,7 +347,7 @@
       <h4 class="subsection-title">Puntaje actual por residente (este medico)</h4>
       <div id="current-avg-wrap" style="margin-top:8px;"></div>
 
-      <h4 class="subsection-title">Promedio final por residente (entre los 3 medicos)</h4>
+      <h4 class="subsection-title">Promedio final por residente (entre los 4 medicos)</h4>
       <div id="resident-avg-wrap" style="margin-top:8px;"></div>
 
       <h4 class="subsection-title">Observaciones por residente</h4>
@@ -348,7 +372,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     (function () {
-      const EVALUATORS = ['Denis Vanegas', 'Mauricio Manzanarez', 'Dora Cerrato'];
+      const EVALUATORS = [
+        'Denis Vanegas',
+        'Mauricio Manzanarez',
+        'Dora Cerrato',
+        'Dr. Engels Delgado',
+        'Dr. Berman Mendoza',
+        'Dr. Gustavo Espinoza'
+      ];
+      const EVALUATOR_ALIASES = {
+        'Engels Delgado': 'Dr. Engels Delgado',
+        'Dr Engels Delgado': 'Dr. Engels Delgado'
+      };
       const RESIDENTS = ['Alfredo Flores', 'Jorge Soza', 'Yordan Arauz', 'Helen Suazo'];
       const ITEMS = [
         { key: 'asistencia', label: '1. Asistencia' },
@@ -362,6 +397,7 @@
       const APPS_SCRIPT_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbz2VMdOFrD-0X64REe_NqUTRmyTSFpzFttvOSc_ut8mFw0J0lnzq2sOqiVhK3_Kgnru0Q/exec';
       const SHEET_ID = '1PaM-2gpIB-HiA59Uw947bNsEfGjIR-8ZdchMzO6wj8w';
       const DRIVE_FOLDER_ID = '12uLk5DzHQc6H3r_J6S3e5OiyGAGcGq0g';
+      const AUTO_SYNC_DELAY_MS = 1200;
 
       const summary = document.getElementById('summary');
       const evaluator = document.getElementById('evaluator');
@@ -377,13 +413,43 @@
 
       const today = new Date().toISOString().slice(0, 10);
       dateInput.value = today;
+      let autoSyncTimer = null;
+      let inFlightSyncFingerprint = '';
+      let lastSyncedFingerprint = '';
 
       var storedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_KEY);
       appsScriptUrlInput.value = storedAppsScriptUrl || APPS_SCRIPT_URL_DEFAULT;
 
       appsScriptUrlInput.addEventListener('change', function () {
         localStorage.setItem(APPS_SCRIPT_URL_KEY, appsScriptUrlInput.value.trim());
+        scheduleAutoSync();
       });
+
+      function normalizeEvaluatorName(name) {
+        const trimmed = (name || '').trim();
+        return EVALUATOR_ALIASES[trimmed] || trimmed;
+      }
+
+      function getEquivalentEvaluatorKeys(name) {
+        const normalized = normalizeEvaluatorName(name);
+        const keys = [normalized];
+
+        Object.keys(EVALUATOR_ALIASES).forEach((legacyName) => {
+          if (normalizeEvaluatorName(legacyName) === normalized) {
+            keys.push(legacyName);
+          }
+        });
+
+        return Array.from(new Set(keys));
+      }
+
+      function setCloudStatus(message, tone) {
+        cloudStatus.textContent = message;
+        cloudStatus.className = 'cloud-status';
+        if (tone) {
+          cloudStatus.classList.add('is-' + tone);
+        }
+      }
 
       function fillStaticOptions(selectEl, values) {
         values.forEach((name) => {
@@ -481,7 +547,34 @@
       }
 
       function getEvaluatorKey() {
-        return evaluator.value || '';
+        return normalizeEvaluatorName(evaluator.value);
+      }
+
+      function getStoreRecord(store, evaluatorName) {
+        const keys = getEquivalentEvaluatorKeys(evaluatorName);
+        for (let i = 0; i < keys.length; i += 1) {
+          if (store[keys[i]]) {
+            return store[keys[i]];
+          }
+        }
+        return null;
+      }
+
+      function persistCurrentRecord() {
+        const key = getEvaluatorKey();
+        if (!key) {
+          return null;
+        }
+
+        const store = readStore();
+        store[key] = getFormRecord();
+        getEquivalentEvaluatorKeys(key).forEach((aliasKey) => {
+          if (aliasKey !== key) {
+            delete store[aliasKey];
+          }
+        });
+        saveStore(store);
+        return store;
       }
 
       function residentScores(residentName) {
@@ -606,7 +699,7 @@
           let count = 0;
 
           EVALUATORS.forEach((doc) => {
-            const record = store[doc];
+            const record = getStoreRecord(store, doc);
             if (record && record.scores && record.scores[residentName]) {
               const items = record.scores[residentName];
               const values = ITEMS.map((it) => Number(items[it.key]) || 0);
@@ -620,7 +713,7 @@
 
           const avgText = count > 0 ? (sum / count).toFixed(2) + '%' : 'Sin datos';
           avgHtml +=
-            '<tr><th>' + residentName + '</th><td>' + count + '/3</td><td>' + avgText + '</td></tr>';
+            '<tr><th>' + residentName + '</th><td>' + count + '/' + EVALUATORS.length + '</td><td>' + avgText + '</td></tr>';
         });
         avgHtml += '</tbody></table>';
         residentAvgWrap.innerHTML = avgHtml;
@@ -689,6 +782,117 @@
             notes: noteArea ? noteArea.value.trim() : ''
           };
         });
+      }
+
+      function hasAnyResidentInput(residents) {
+        return residents.some((resident) => {
+          if ((resident.notes || '').trim() !== '') {
+            return true;
+          }
+
+          return ITEMS.some((item) => (resident.scores[item.key] || '') !== '');
+        });
+      }
+
+      function buildScoresSyncPayload() {
+        const key = getEvaluatorKey();
+        if (!key) {
+          return { ok: false, message: 'Selecciona el medico evaluador para sincronizar.' };
+        }
+
+        if (!dateInput.value) {
+          return { ok: false, message: 'Selecciona la fecha antes de sincronizar.' };
+        }
+
+        if (!shiftInput.value.trim()) {
+          return { ok: false, message: 'Escribe el turno antes de sincronizar.' };
+        }
+
+        const residents = getResidentsPayload();
+        if (!hasAnyResidentInput(residents)) {
+          return { ok: false, message: 'Agrega al menos una calificacion u observacion para sincronizar.' };
+        }
+
+        return {
+          ok: true,
+          payload: {
+            action: 'saveScores',
+            spreadsheetId: SHEET_ID,
+            evaluator: key,
+            date: dateInput.value || today,
+            shift: shiftInput.value.trim(),
+            residents: residents
+          }
+        };
+      }
+
+      function getSyncFingerprint(payload) {
+        return JSON.stringify(payload);
+      }
+
+      async function syncScoresToGoogleSheet(options) {
+        const settings = options || {};
+        const prepared = settings.prepared || buildScoresSyncPayload();
+
+        if (!prepared.ok) {
+          setCloudStatus(prepared.message, 'pending');
+          return { skipped: true, reason: 'not-ready' };
+        }
+
+        const fingerprint = getSyncFingerprint(prepared.payload);
+        if (!settings.force && (fingerprint === lastSyncedFingerprint || fingerprint === inFlightSyncFingerprint)) {
+          return { skipped: true, reason: 'unchanged' };
+        }
+
+        inFlightSyncFingerprint = fingerprint;
+        setCloudStatus('Sincronizando cambios con Google Sheets...', 'syncing');
+
+        try {
+          const result = await postToAppsScript(prepared.payload);
+          lastSyncedFingerprint = fingerprint;
+          setCloudStatus('Google Sheets actualizado: ' + (result.message || 'OK'), 'success');
+          return { skipped: false, result: result };
+        } catch (err) {
+          setCloudStatus('Error al guardar en Google Sheets: ' + err.message, 'error');
+          if (!settings.silent) {
+            throw err;
+          }
+          return { skipped: false, error: err };
+        } finally {
+          if (inFlightSyncFingerprint === fingerprint) {
+            inFlightSyncFingerprint = '';
+          }
+        }
+      }
+
+      function scheduleAutoSync() {
+        const prepared = buildScoresSyncPayload();
+        if (!prepared.ok) {
+          clearTimeout(autoSyncTimer);
+          autoSyncTimer = null;
+          setCloudStatus(prepared.message, 'pending');
+          return;
+        }
+
+        const fingerprint = getSyncFingerprint(prepared.payload);
+        if (fingerprint === lastSyncedFingerprint) {
+          setCloudStatus('Los cambios actuales ya estan sincronizados con Google Sheets.', 'success');
+          return;
+        }
+
+        clearTimeout(autoSyncTimer);
+        setCloudStatus('Cambios detectados. Se sincronizaran automaticamente en unos segundos...', 'pending');
+        autoSyncTimer = window.setTimeout(function () {
+          syncScoresToGoogleSheet({ prepared: prepared, silent: true });
+        }, AUTO_SYNC_DELAY_MS);
+      }
+
+      function handleFormMutation() {
+        persistCurrentRecord();
+        updateResidentViews();
+        renderCrossEvaluatorAverage();
+        buildSummary();
+        scheduleAutoSync();
       }
 
       async function postToAppsScript(payload) {
@@ -806,7 +1010,10 @@
         };
       }
 
-      allScoreSelects().forEach((sel) => sel.addEventListener('change', updateResidentViews));
+      allScoreSelects().forEach((sel) => sel.addEventListener('change', handleFormMutation));
+      allNoteAreas().forEach((area) => area.addEventListener('input', handleFormMutation));
+      dateInput.addEventListener('change', handleFormMutation);
+      shiftInput.addEventListener('input', handleFormMutation);
 
       document.getElementById('btn-summary').addEventListener('click', function () {
         updateResidentViews();
@@ -821,43 +1028,23 @@
           alert('Debes seleccionar el medico de base antes de guardar.');
           return;
         }
-        const store = readStore();
-        store[key] = getFormRecord();
-        saveStore(store);
+        persistCurrentRecord();
         updateResidentViews();
         renderCrossEvaluatorAverage();
+        buildSummary();
+        scheduleAutoSync();
         alert('Rúbrica guardada para ' + key + '.');
       });
 
       document.getElementById('btn-sync-sheet').addEventListener('click', async function () {
         try {
-          const key = getEvaluatorKey();
-          if (!key) {
-            alert('Selecciona el medico evaluador antes de sincronizar.');
+          const syncResult = await syncScoresToGoogleSheet({ force: true });
+          if (syncResult && syncResult.skipped) {
+            alert('Completa medico, fecha, turno y al menos una calificacion antes de sincronizar.');
             return;
           }
-
-          const proceed = confirm('Se enviaran las notas del medico ' + key + ' a Google Sheets. ¿Continuar?');
-          if (!proceed) {
-            cloudStatus.textContent = 'Envio cancelado por el usuario.';
-            return;
-          }
-
-          const payload = {
-            action: 'saveScores',
-            spreadsheetId: SHEET_ID,
-            evaluator: key,
-            date: dateInput.value || today,
-            shift: shiftInput.value.trim(),
-            residents: getResidentsPayload()
-          };
-
-          cloudStatus.textContent = 'Enviando notas a Google Sheets...';
-          const result = await postToAppsScript(payload);
-          cloudStatus.textContent = 'Google Sheets actualizado: ' + (result.message || 'OK');
           alert('Datos enviados a Google Sheets correctamente.');
         } catch (err) {
-          cloudStatus.textContent = 'Error al guardar en Google Sheets: ' + err.message;
           alert('Error al guardar en Google Sheets: ' + err.message);
         }
       });
@@ -910,13 +1097,16 @@
           return;
         }
         const store = readStore();
-        if (!store[key]) {
+        const record = getStoreRecord(store, key);
+        if (!record) {
           alert('No existe una rubrica guardada para este medico.');
           return;
         }
-        setFormFromRecord(store[key]);
+        setFormFromRecord(record);
         renderCrossEvaluatorAverage();
         buildSummary();
+        lastSyncedFingerprint = '';
+        scheduleAutoSync();
         globalStatus.textContent = 'Rubrica cargada para ' + key + '.';
         alert('Rubrica cargada para ' + key + '.');
       });
@@ -942,6 +1132,9 @@
         dateInput.value = today;
         shiftInput.value = '';
         updateResidentViews();
+        renderCrossEvaluatorAverage();
+        lastSyncedFingerprint = '';
+        setCloudStatus('Formulario limpio. Completa medico, fecha, turno y notas para volver a sincronizar.', 'pending');
         globalStatus.textContent = 'Formulario limpiado correctamente.';
         alert('Formulario limpiado.');
       });
@@ -950,14 +1143,18 @@
         const key = getEvaluatorKey();
         if (!key) {
           globalStatus.textContent = 'Selecciona un medico para cargar o crear su rubrica unica con los 4 residentes.';
+          setCloudStatus('Selecciona un medico para habilitar la sincronizacion automatica.', 'pending');
           return;
         }
         globalStatus.textContent =
           'Medico seleccionado: ' + key + '. Puedes cargar su rubrica, editarla y luego imprimir un solo PDF.';
+        handleFormMutation();
       });
 
       updateResidentViews();
       renderCrossEvaluatorAverage();
+      buildSummary();
+      setCloudStatus('Selecciona medico, fecha y turno. La sincronizacion con Google Sheets sera automatica al detectar cambios.', 'pending');
     })();
   </script>
 </body>
